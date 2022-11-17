@@ -101,9 +101,7 @@ def main():
     if target_lang not in ('qqq', 'keys', 'synonyms', 'constants'):
       target_defs = read_json_file(os.path.join(os.curdir, arg_file))
 
-      # Verify that keys are 'ascii'
-      bad_keys = [key for key in target_defs if not string_is_ascii(key)]
-      if bad_keys:
+      if bad_keys := [key for key in target_defs if not string_is_ascii(key)]:
         print(u'These keys in {0} contain non ascii characters: {1}'.format(
             filename, ', '.join(bad_keys)))
 
@@ -116,7 +114,7 @@ def main():
           target_defs[key] = _NEWLINE_PATTERN.sub(' ', value)
 
       # Output file.
-      outname = os.path.join(os.curdir, args.output_dir, target_lang + '.js')
+      outname = os.path.join(os.curdir, args.output_dir, f'{target_lang}.js')
       with codecs.open(outname, 'w', 'utf-8') as outfile:
         outfile.write(
             """// This file was automatically generated.  Do not modify.

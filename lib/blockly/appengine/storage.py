@@ -33,7 +33,7 @@ def keyGen():
   KEY_LEN = 6
   CHARS = "abcdefghijkmnopqrstuvwxyz23456789"  # Exclude l, 0, 1.
   max_index = len(CHARS) - 1
-  return "".join([CHARS[randint(0, max_index)] for x in range(KEY_LEN)])
+  return "".join([CHARS[randint(0, max_index)] for _ in range(KEY_LEN)])
 
 class Xml(ndb.Model):
   # A row in the database.
@@ -45,8 +45,7 @@ def xmlToKey(xml_content):
   xml_hash = long(hashlib.sha1(xml_content).hexdigest(), 16)
   xml_hash = int(xml_hash % (2 ** 64) - (2 ** 63))
   lookup_query = Xml.query(Xml.xml_hash == xml_hash)
-  lookup_result = lookup_query.get()
-  if lookup_result:
+  if lookup_result := lookup_query.get():
     xml_key = lookup_result.key.string_id()
   else:
     trials = 0
@@ -66,16 +65,13 @@ def keyToXml(key_provided):
   # Normalize the string.
   key_provided = key_provided.lower().strip()
   # Check memcache for a quick match.
-  xml = memcache.get("XML_" + key_provided)
+  xml = memcache.get(f"XML_{key_provided}")
   if xml is None:
     # Check datastore for a definitive match.
     result = Xml.get_by_id(key_provided)
-    if not result:
-      xml = ""
-    else:
-      xml = result.xml_content
+    xml = result.xml_content if result else ""
     # Save to memcache for next hit.
-    memcache.add("XML_" + key_provided, xml, 3600)
+    memcache.add(f"XML_{key_provided}", xml, 3600)
   return xml.encode("utf-8")
 
 if __name__ == "__main__":

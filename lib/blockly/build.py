@@ -57,11 +57,8 @@ if sys.version_info[0] != 2:
   raise Exception("Blockly build only compatible with Python 2.x.\n"
                   "You are using: " + sys.version)
 
-for arg in sys.argv[1:len(sys.argv)]:
-  if (arg != 'core' and
-      arg != 'accessible' and
-      arg != 'generators' and
-      arg != 'langfiles'):
+for arg in sys.argv[1:]:
+  if arg not in ['core', 'accessible', 'generators', 'langfiles']:
     raise Exception("Invalid argument: \"" + arg + "\". Usage: build.py "
         "<0 or more of accessible, core, generators, langfiles>")
 
@@ -101,9 +98,9 @@ class Gen_uncompressed(threading.Thread):
     self.target_filename = target_filename
 
   def run(self):
-    f = open(self.target_filename, 'w')
-    f.write(HEADER)
-    f.write("""
+    with open(self.target_filename, 'w') as f:
+      f.write(HEADER)
+      f.write("""
 this.IS_NODE_JS = !!(typeof module !== 'undefined' && module.exports);
 
 this.BLOCKLY_DIR = (function(root) {
@@ -138,31 +135,35 @@ this.BLOCKLY_BOOT = function(root) {
   }
   // Execute after Closure has loaded.
 """)
-    add_dependency = []
-    base_path = calcdeps.FindClosureBasePath(self.search_paths)
-    for dep in calcdeps.BuildDependenciesFromFiles(self.search_paths):
-      add_dependency.append(calcdeps.GetDepsLine(dep, base_path))
-    add_dependency.sort()  # Deterministic build.
-    add_dependency = '\n'.join(add_dependency)
-    # Find the Blockly directory name and replace it with a JS variable.
-    # This allows blockly_uncompressed.js to be compiled on one computer and be
-    # used on another, even if the directory name differs.
-    m = re.search('[\\/]([^\\/]+)[\\/]core[\\/]blockly.js', add_dependency)
-    add_dependency = re.sub('([\\/])' + re.escape(m.group(1)) +
-        '([\\/](core|accessible)[\\/])', '\\1" + dir + "\\2', add_dependency)
-    f.write(add_dependency + '\n')
+      base_path = calcdeps.FindClosureBasePath(self.search_paths)
+      add_dependency = [
+          calcdeps.GetDepsLine(dep, base_path)
+          for dep in calcdeps.BuildDependenciesFromFiles(self.search_paths)
+      ]
+      add_dependency.sort()  # Deterministic build.
+      add_dependency = '\n'.join(add_dependency)
+      # Find the Blockly directory name and replace it with a JS variable.
+      # This allows blockly_uncompressed.js to be compiled on one computer and be
+      # used on another, even if the directory name differs.
+      m = re.search('[\\/]([^\\/]+)[\\/]core[\\/]blockly.js', add_dependency)
+      add_dependency = re.sub(
+          '([\\/])' + re.escape(m[1]) + '([\\/](core|accessible)[\\/])',
+          '\\1" + dir + "\\2',
+          add_dependency,
+      )
+      f.write(add_dependency + '\n')
 
-    provides = []
-    for dep in calcdeps.BuildDependenciesFromFiles(self.search_paths):
-      if not dep.filename.startswith(os.pardir + os.sep):  # '../'
-        provides.extend(dep.provides)
-    provides.sort()  # Deterministic build.
-    f.write('\n')
-    f.write('// Load Blockly.\n')
-    for provide in provides:
-      f.write("goog.require('%s');\n" % provide)
+      provides = []
+      for dep in calcdeps.BuildDependenciesFromFiles(self.search_paths):
+        if not dep.filename.startswith(os.pardir + os.sep):  # '../'
+          provides.extend(dep.provides)
+      provides.sort()  # Deterministic build.
+      f.write('\n')
+      f.write('// Load Blockly.\n')
+      for provide in provides:
+        f.write("goog.require('%s');\n" % provide)
 
-    f.write("""
+      f.write("""
 delete root.BLOCKLY_DIR;
 delete root.BLOCKLY_BOOT;
 delete root.IS_NODE_JS;
@@ -180,8 +181,7 @@ if (this.IS_NODE_JS) {
   document.write('<script>this.BLOCKLY_BOOT(this);</script>');
 }
 """)
-    f.close()
-    print("SUCCESS: " + self.target_filename)
+    print(f"SUCCESS: {self.target_filename}")
 
 
 class Gen_compressed(threading.Thread):
@@ -234,10 +234,8 @@ class Gen_compressed(threading.Thread):
       # Filter out the Closure files (the compiler will add them).
       if filename.startswith(os.pardir + os.sep):  # '../'
         continue
-      f = open(filename)
-      params.append(("js_code", "".join(f.readlines())))
-      f.close()
-
+      with open(filename) as f:
+        params.append(("js_code", "".join(f.readlines())))
     self.do_compile(params, target_filename, filenames, "")
 
   def gen_accessible(self):
@@ -263,10 +261,8 @@ class Gen_compressed(threading.Thread):
       # Filter out the Closure files (the compiler will add them).
       if filename.startswith(os.pardir + os.sep):  # '../'
         continue
-      f = open(filename)
-      params.append(("js_code", "".join(f.readlines())))
-      f.close()
-
+      with open(filename) as f:
+        params.append(("js_code", "".join(f.readlines())))
     self.do_compile(params, target_filename, filenames, "")
 
   def gen_blocks(self):
@@ -280,24 +276,20 @@ class Gen_compressed(threading.Thread):
         ("output_info", "errors"),
         ("output_info", "statistics"),
         ("warning_level", "DEFAULT"),
-      ]
+        ("js_code", "goog.provide('Blockly');goog.provide('Blockly.Blocks');"),
+    ]
 
-    # Read in all the source files.
-    # Add Blockly.Blocks to be compatible with the compiler.
-    params.append(("js_code", "goog.provide('Blockly');goog.provide('Blockly.Blocks');"))
     filenames = glob.glob(os.path.join("blocks", "*.js"))
     filenames.sort()  # Deterministic build.
     for filename in filenames:
-      f = open(filename)
-      params.append(("js_code", "".join(f.readlines())))
-      f.close()
-
+      with open(filename) as f:
+        params.append(("js_code", "".join(f.readlines())))
     # Remove Blockly.Blocks to be compatible with Blockly.
     remove = "var Blockly={Blocks:{}};"
     self.do_compile(params, target_filename, filenames, remove)
 
   def gen_generator(self, language):
-    target_filename = language + "_compressed.js"
+    target_filename = f"{language}_compressed.js"
     # Define the parameters for the POST request.
     params = [
         ("compilation_level", "SIMPLE_OPTIMIZATIONS"),
@@ -307,19 +299,16 @@ class Gen_compressed(threading.Thread):
         ("output_info", "errors"),
         ("output_info", "statistics"),
         ("warning_level", "DEFAULT"),
-      ]
+        ("js_code", "goog.provide('Blockly.Generator');"),
+    ]
 
-    # Read in all the source files.
-    # Add Blockly.Generator to be compatible with the compiler.
-    params.append(("js_code", "goog.provide('Blockly.Generator');"))
     filenames = glob.glob(
         os.path.join("generators", language, "*.js"))
     filenames.sort()  # Deterministic build.
-    filenames.insert(0, os.path.join("generators", language + ".js"))
+    filenames.insert(0, os.path.join("generators", f"{language}.js"))
     for filename in filenames:
-      f = open(filename)
-      params.append(("js_code", "".join(f.readlines())))
-      f.close()
+      with open(filename) as f:
+        params.append(("js_code", "".join(f.readlines())))
     filenames.insert(0, "[goog.provide]")
 
     # Remove Blockly.Generator to be compatible with Blockly.
@@ -339,7 +328,7 @@ class Gen_compressed(threading.Thread):
     try:
       json_data = json.loads(json_str)
     except ValueError:
-      print("ERROR: Could not parse JSON for %s.  Raw data:" % target_filename)
+      print(f"ERROR: Could not parse JSON for {target_filename}.  Raw data:")
       print(json_str)
       return
 
@@ -352,7 +341,7 @@ class Gen_compressed(threading.Thread):
     if json_data.has_key("serverErrors"):
       errors = json_data["serverErrors"]
       for error in errors:
-        print("SERVER ERROR: %s" % target_filename)
+        print(f"SERVER ERROR: {target_filename}")
         print(error["error"])
     elif json_data.has_key("errors"):
       errors = json_data["errors"]
@@ -412,14 +401,12 @@ class Gen_compressed(threading.Thread):
       original_b = stats["originalSize"]
       compressed_b = stats["compressedSize"]
       if original_b > 0 and compressed_b > 0:
-        f = open(target_filename, "w")
-        f.write(code)
-        f.close()
-
+        with open(target_filename, "w") as f:
+          f.write(code)
         original_kb = int(original_b / 1024 + 0.5)
         compressed_kb = int(compressed_b / 1024 + 0.5)
         ratio = int(float(compressed_b) / float(original_b) * 100 + 0.5)
-        print("SUCCESS: " + target_filename)
+        print(f"SUCCESS: {target_filename}")
         print("Size changed from %d KB to %d KB (%d%%)." % (
             original_kb, compressed_kb, ratio))
       else:
@@ -444,15 +431,13 @@ class Gen_langfiles(threading.Thread):
     except OSError as e:
       # Was a file not found?
       if e.errno == errno.ENOENT:
-        # If it was a source file, we can't proceed.
-        if e.filename in srcs:
-          print("Source file missing: " + e.filename)
-          sys.exit(1)
-        else:
+        if e.filename not in srcs:
           # If a destination file was missing, rebuild.
           return True
+        print(f"Source file missing: {e.filename}")
+        sys.exit(1)
       else:
-        print("Error checking file creation times: " + e)
+        print(f"Error checking file creation times: {e}")
 
   def run(self):
     # The files msg/json/{en,qqq,synonyms}.json depend on msg/messages.js.
@@ -501,9 +486,9 @@ class Gen_langfiles(threading.Thread):
       # This assumes the path to the current directory does not contain "json".
       f = f.replace("json", "js")
       if os.path.isfile(f):
-        print("SUCCESS: " + f)
+        print(f"SUCCESS: {f}")
       else:
-        print("FAILED to create " + f)
+        print(f"FAILED to create {f}")
 
 
 if __name__ == "__main__":

@@ -83,34 +83,28 @@ def main():
   infile = codecs.open(args.input_file, 'r', 'utf-8')
   for line in infile:
     if line.startswith('///'):
+      description = (f'{description} {line[3:].strip()}'
+                     if description else line[3:].strip())
+    elif match := _INPUT_DEF_PATTERN.match(line):
+      key = match.group(1)
+      value = match.group(2).replace("\\'", "'")
+      if not description:
+        print('Warning: No description for ' + result['meaning'])
+      if (description and _CONSTANT_DESCRIPTION_PATTERN.search(description)):
+        constants[key] = value
+      else:
+        result = {}
+        result['meaning'] = key
+        result['source'] = value
+        result['description'] = description
+        results.append(result)
+      description = ''
+    elif match := _INPUT_SYN_PATTERN.match(line):
       if description:
-        description = description + ' ' + line[3:].strip()
-      else:
-        description = line[3:].strip()
-    else:
-      match = _INPUT_DEF_PATTERN.match(line)
-      if match:
-        key = match.group(1)
-        value = match.group(2).replace("\\'", "'")
-        if not description:
-          print('Warning: No description for ' + result['meaning'])
-        if (description and _CONSTANT_DESCRIPTION_PATTERN.search(description)):
-          constants[key] = value
-        else:
-          result = {}
-          result['meaning'] = key
-          result['source'] = value
-          result['description'] = description
-          results.append(result)
+        print('Warning: Description preceding definition of synonym {0}.'.
+              format(match.group(1)))
         description = ''
-      else:
-        match = _INPUT_SYN_PATTERN.match(line)
-        if match:
-          if description:
-            print('Warning: Description preceding definition of synonym {0}.'.
-                  format(match.group(1)))
-            description = ''
-          synonyms[match.group(1)] = match.group(2)
+      synonyms[match.group(1)] = match.group(2)
   infile.close()
 
   # Create <lang_file>.json, keys.json, and qqq.json.

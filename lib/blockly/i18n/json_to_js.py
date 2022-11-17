@@ -44,7 +44,7 @@ def _create_xlf(target_lang):
     Raises:
         IOError: An error occurred while opening or writing the file.
     """
-    filename = os.path.join(os.curdir, args.output_dir, target_lang + '.xlf')
+    filename = os.path.join(os.curdir, args.output_dir, f'{target_lang}.xlf')
     out_file = codecs.open(filename, 'w', 'utf-8')
     out_file.write("""<?xml version="1.0" encoding="UTF-8"?>
 <xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
@@ -121,14 +121,20 @@ def main():
                         help='ISO 639-1 source language code')
     parser.add_argument('--output_dir', default='generated',
                         help='relative directory for output files')
-    parser.add_argument('--key_file', default='json' + os.path.sep + 'keys.json',
-                        help='relative path to input keys file')
+    parser.add_argument(
+        '--key_file',
+        default=f'json{os.path.sep}keys.json',
+        help='relative path to input keys file',
+    )
+
     parser.add_argument('--template', default='template.soy')
-    parser.add_argument('--path_to_jar',
-                        default='..' + os.path.sep + 'apps' + os.path.sep
-                        + '_soy',
-                        help='relative path from working directory to '
-                        'SoyToJsSrcCompiler.jar')
+    parser.add_argument(
+        '--path_to_jar',
+        default=f'..{os.path.sep}apps{os.path.sep}_soy',
+        help='relative path from working directory to '
+        'SoyToJsSrcCompiler.jar',
+    )
+
     parser.add_argument('files', nargs='+', help='input files')
 
     # Initialize global variables.
@@ -139,12 +145,8 @@ def main():
     if (not args.output_dir.endswith(os.path.sep)):
       args.output_dir += os.path.sep
 
-    # Read in keys.json, mapping descriptions (e.g., Maze.turnLeft) to
-    # Closure keys (long hash numbers).
-    key_file = open(args.key_file)
-    key_dict = json.load(key_file)
-    key_file.close()
-
+    with open(args.key_file) as key_file:
+        key_dict = json.load(key_file)
     # Process each input file.
     print('Creating .xlf files...')
     processed_langs = []
@@ -152,33 +154,33 @@ def main():
       # Windows does not expand globs automatically.
       args.files = glob.glob(args.files[0])
     for arg_file in args.files:
-      (path_to_json, filename) = os.path.split(arg_file)
-      if not filename.endswith('.json'):
-        raise InputError(filename, 'filenames must end with ".json"')
-      target_lang = filename[:filename.index('.')]
-      if not target_lang in ('qqq', 'keys'):
-        processed_langs.append(target_lang)
-        _process_file(path_to_json, target_lang, key_dict)
+        (path_to_json, filename) = os.path.split(arg_file)
+        if not filename.endswith('.json'):
+          raise InputError(filename, 'filenames must end with ".json"')
+        target_lang = filename[:filename.index('.')]
+        if target_lang not in ('qqq', 'keys'):
+            processed_langs.append(target_lang)
+            _process_file(path_to_json, target_lang, key_dict)
 
     # Output command line for Closure compiler.
     if processed_langs:
-      print('Creating .js files...')
-      processed_lang_list = ','.join(processed_langs)
-      subprocess.check_call([
-          'java',
-          '-jar', os.path.join(args.path_to_jar, 'SoyToJsSrcCompiler.jar'),
-          '--locales', processed_lang_list,
-          '--messageFilePathFormat', args.output_dir + '{LOCALE}.xlf',
-          '--outputPathFormat', args.output_dir + '{LOCALE}.js',
-          '--srcs', args.template])
-      if len(processed_langs) == 1:
-        print('Created ' + processed_lang_list + '.js in ' + args.output_dir)
-      else:
-        print('Created {' + processed_lang_list + '}.js in ' + args.output_dir)
+        print('Creating .js files...')
+        processed_lang_list = ','.join(processed_langs)
+        subprocess.check_call([
+            'java',
+            '-jar', os.path.join(args.path_to_jar, 'SoyToJsSrcCompiler.jar'),
+            '--locales', processed_lang_list,
+            '--messageFilePathFormat', args.output_dir + '{LOCALE}.xlf',
+            '--outputPathFormat', args.output_dir + '{LOCALE}.js',
+            '--srcs', args.template])
+        if len(processed_langs) == 1:
+            print(f'Created {processed_lang_list}.js in {args.output_dir}')
+        else:
+            print('Created {' + processed_lang_list + '}.js in ' + args.output_dir)
 
-      for lang in processed_langs:
-        os.remove(args.output_dir + lang + '.xlf')
-      print('Removed .xlf files.')
+        for lang in processed_langs:
+          os.remove(args.output_dir + lang + '.xlf')
+        print('Removed .xlf files.')
 
 
 if __name__ == '__main__':

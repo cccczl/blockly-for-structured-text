@@ -213,11 +213,10 @@ def main():
     units = _process_file(args.xlf)
     files = []
     for arg in args.templates:
-      for filename in arg.split(','):
-        filename = filename.strip();
-        if filename:
-          with open(filename) as myfile:
-            files.append(' '.join(line.strip() for line in myfile))
+        for filename in arg.split(','):
+            if filename := filename.strip():
+                with open(filename) as myfile:
+                  files.append(' '.join(line.strip() for line in myfile))
     sorted_units = sort_units(units, ' '.join(files))
 
     # Write the output files.
@@ -225,7 +224,7 @@ def main():
 
     # Delete the input .xlf file.
     os.remove(args.xlf)
-    print('Removed ' + args.xlf)
+    print(f'Removed {args.xlf}')
 
 
 if __name__ == '__main__':
